@@ -38,35 +38,35 @@ typedef void (*GstOmxBaseFilterCb) (GstOmxBaseFilter *self);
 
 #include <gstomx_util.h>
 
-             struct GstOmxBaseFilter
+struct GstOmxBaseFilter
 {
-  GstElement element;
+    GstElement element;
 
-  GstPad *sinkpad;
-  GstPad *srcpad;
+    GstPad *sinkpad;
+    GstPad *srcpad;
 
-  GOmxCore *gomx;
-  GOmxPort *in_port;
-  GOmxPort *out_port;
+    GOmxCore *gomx;
+    GOmxPort *in_port;
+    GOmxPort *out_port;
 
-  GThread *thread;
+    GThread *thread;
 
-  char *omx_component;
-  char *omx_library;
-  gboolean use_timestamps; /** @todo remove; timestamps should always be used */
-  gboolean initialized;
+    char *omx_component;
+    char *omx_library;
+    gboolean use_timestamps; /** @todo remove; timestamps should always be used */
+    gboolean initialized;
 
-  GstOmxBaseFilterCb omx_setup;
+    GstOmxBaseFilterCb omx_setup;
 };
 
 struct GstOmxBaseFilterClass
 {
-  GstElementClass parent_class;
+    GstElementClass parent_class;
 };
 
 GType gst_omx_base_filter_get_type (void);
 
-void gst_omx_base_filter_omx_init (GTypeInstance *instance);
+void gst_omx_base_filter_omx_init (GstOmxBaseFilter *self);
 
 G_END_DECLS
 
