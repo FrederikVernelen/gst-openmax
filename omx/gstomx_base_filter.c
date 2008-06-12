@@ -1021,9 +1021,12 @@ pad_event (GstPad *pad,
         case GST_EVENT_EOS:
             /* Close the inpurt port. */
             g_omx_port_set_done (self->in_port);
-            /* Wait for the output port to get the EOS. */
-            g_omx_core_wait_for_done (self->gomx);
-            ret = gst_pad_push_event (self->srcpad, event);
+            if(!(out_port->tunneled))
+            {
+                /* Wait for the output port to get the EOS. */
+                g_omx_core_wait_for_done (self->gomx);
+                ret = gst_pad_push_event (self->srcpad, event);
+            }
             break;
 
         case GST_EVENT_FLUSH_START:
