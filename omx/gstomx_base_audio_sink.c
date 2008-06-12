@@ -570,7 +570,6 @@ pad_chain (GstPad *pad,
 
     gomx = self->gomx;
 
-    printf("N");
     GST_LOG_OBJECT (self, "begin");
     GST_LOG_OBJECT (self, "gst_buffer: size=%lu", GST_BUFFER_SIZE (buf));
 

@@ -317,9 +317,11 @@ g_omx_core_release_buffer (GOmxCore *core,
 
         if (omx_buffer)
         {
-            g_free (omx_buffer->pBuffer);
-            omx_buffer->pBuffer = NULL;
-
+            if(omx_buffer->pBuffer)
+            {
+                g_free (omx_buffer->pBuffer);
+                omx_buffer->pBuffer = NULL;
+            }
             OMX_FreeBuffer (core->omx_handle, port->port_index, omx_buffer);
             port->buffers[i] = NULL;
         }
@@ -395,8 +397,10 @@ g_omx_core_start (GOmxCore *core)
                 OMX_BUFFERHEADERTYPE *omx_buffer;
 
                 omx_buffer = port->buffers[i];
-
-                got_buffer (core, port, omx_buffer);
+                if(omx_buffer)
+                {
+                    got_buffer (core, port, omx_buffer);
+                }
             }
         }
     }
@@ -528,6 +532,7 @@ void
 g_omx_port_setup (GOmxPort *port,
                   OMX_PARAM_PORTDEFINITIONTYPE *omx_port)
 {
+    guint i;
     GOmxPortType type;
 
     switch (omx_port->eDir)
@@ -553,6 +558,11 @@ g_omx_port_setup (GOmxPort *port,
         g_print ("WARNING: unhandled setup\n");
     }
     port->buffers = g_new (OMX_BUFFERHEADERTYPE *, port->num_buffers);
+
+    for (i = 0; i < port->num_buffers; i++)
+    {
+        port->buffers[i] = NULL;
+    }
 }
 
 void
