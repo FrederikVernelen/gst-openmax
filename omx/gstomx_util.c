@@ -688,10 +688,15 @@ wait_for_state (GOmxCore *core,
     g_omx_sem_down (core->state_sem);
 }
 
+/*
+ * Callbacks
+ */
+
 inline void
-send_eos_buffer (GOmxCore *core,
-                 OMX_BUFFERHEADERTYPE *omx_buffer)
+in_port_cb (GOmxPort *port,
+            OMX_BUFFERHEADERTYPE *omx_buffer)
 {
+    GOmxCore *core = port->core;
     if (G_UNLIKELY (!core->eos_sent))
     {
         omx_buffer->nFlags = OMX_BUFFERFLAG_EOS;
@@ -701,26 +706,9 @@ send_eos_buffer (GOmxCore *core,
 
         OMX_EmptyThisBuffer (core->omx_handle, omx_buffer);
     }
-}
-
-/*
- * Callbacks
- */
-
-inline void
-in_port_cb (GOmxPort *port,
-            OMX_BUFFERHEADERTYPE *omx_buffer)
-{
-    if (port->done)
+    else
     {
-        send_eos_buffer (port->core, omx_buffer);
-        return;
-    }
-
-    if (port->done)
-    {
-        omx_buffer->nFlags = OMX_BUFFERFLAG_EOS;
-        port->core->eos_sent = true;
+        g_omx_port_push_buffer (port, omx_buffer);
     }
 }
 
@@ -754,18 +742,23 @@ got_buffer (GOmxCore *core,
 
     if (G_LIKELY (port))
     {
-        g_omx_port_push_buffer (port, omx_buffer);
-
-        switch (port->type)
+        if(G_LIKELY(!(port->done)))
         {
-            case GOMX_PORT_INPUT:
-                in_port_cb (port, omx_buffer);
-                break;
-            case GOMX_PORT_OUTPUT:
-                out_port_cb (port, omx_buffer);
-                break;
-            default:
-                break;
+            g_omx_port_push_buffer (port, omx_buffer);
+        }
+        else
+        {
+            switch (port->type)
+            {
+                case GOMX_PORT_INPUT:
+                    in_port_cb (port, omx_buffer);
+                    break;
+                case GOMX_PORT_OUTPUT:
+                    out_port_cb (port, omx_buffer);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }
