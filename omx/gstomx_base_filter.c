@@ -565,12 +565,14 @@ output_thread (gpointer cb_data)
 
     GST_DEBUG_OBJECT (self, "finishing output thread");
 
+    self->thread = NULL;
+
     GST_LOG_OBJECT (self, "end");
 
     return NULL;
 }
 
-static GstPad* 
+static GstPad*
 find_peer_of_proxypad(GstPad *peer)
 {
     GstPad* ghostpad;
@@ -1155,6 +1157,7 @@ type_instance_init (GTypeInstance *instance,
 
     self->sinkpad =
         gst_pad_new_from_template (gst_element_class_get_pad_template (element_class, "sink"), "sink");
+    (self->sinkpad_data).setting_tunnel = FALSE;
 
     gst_pad_set_chain_function (self->sinkpad, pad_chain);
     gst_pad_set_event_function (self->sinkpad, pad_event);
