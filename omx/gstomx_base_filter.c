@@ -1096,6 +1096,40 @@ pad_event (GstPad *pad,
 }
 
 static void
+event_handler_cb (GOmxCore *core,
+                  OMX_EVENTTYPE eEvent,
+                  OMX_U32 nData1,
+                  OMX_U32 nData2,
+                  OMX_PTR pEventData)
+{
+    GstOmxBaseFilter *self;
+    self = GST_OMX_BASE_FILTER (core->client_data);
+    GOmxPort *out_port = self->out_port;
+    GOmxPort *in_port = self->in_port;
+
+    switch (eEvent)
+    {
+        case OMX_EventBufferFlag:
+            if((out_port != NULL)&&(in_port != NULL))
+            {
+                if ( (nData2 & OMX_BUFFERFLAG_EOS) && (!(out_port->tunneled)) && (in_port->tunneled) )
+                {
+                    GstEvent *event = gst_event_new_eos();
+                    /* Close the input port. */
+                    g_omx_port_set_done (self->in_port);
+                    /* Wait for the output port to get the EOS. */
+                    g_omx_core_wait_for_done (self->gomx);
+
+                    gst_pad_push_event (self->srcpad, event);
+                }
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void
 type_instance_init (GTypeInstance *instance,
                     gpointer g_class)
 {
@@ -1116,6 +1150,7 @@ type_instance_init (GTypeInstance *instance,
         GOmxCore *gomx;
         self->gomx = gomx = g_omx_core_new ();
         gomx->client_data = self;
+        gomx->event_handler_cb = event_handler_cb;
     }
 
     self->sinkpad =
