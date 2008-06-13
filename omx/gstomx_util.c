@@ -508,6 +508,7 @@ g_omx_port_new (GOmxCore *core)
     port->tunneled = FALSE;
     port->linked = FALSE;
     port->enabled = TRUE;
+    port->done = FALSE;
 
     port->mutex = g_mutex_new ();
     port->sem = g_omx_sem_new ();
@@ -611,8 +612,6 @@ void
 g_omx_port_set_done (GOmxPort *port)
 {
     port->done = true;
-
-    g_omx_sem_up (port->sem);
 
     if (port->done_cb)
     {

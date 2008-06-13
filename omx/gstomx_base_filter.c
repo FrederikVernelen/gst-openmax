@@ -1032,8 +1032,8 @@ pad_event (GstPad *pad,
             break;
 
         case GST_EVENT_FLUSH_START:
-            g_omx_sem_up (self->in_port->sem);
             OMX_SendCommand (self->gomx->omx_handle, OMX_CommandFlush, 0, NULL);
+            g_omx_sem_down (gomx->port_state_sem);
             ret = gst_pad_push_event (self->srcpad, event);
             break;
 
