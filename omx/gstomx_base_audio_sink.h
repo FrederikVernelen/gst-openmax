@@ -25,10 +25,15 @@
 #define GSTOMX_BASE_AUDIO_SINK_H
 
 #include <gst/gst.h>
+#include <gst/base/gstbasesink.h>
 
 #include <config.h>
 
 G_BEGIN_DECLS
+
+//#define GST_TYPE_OMX_BASE_AUDIO_SINK		(gst_omx_base_audio_sink_get_type())
+//#define GST_OMX_BASE_AUDIO_SINK(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_BASE_AUDIO_SINK,GstOmxBaseAudioSink))
+//#define GST_OMX_BASE_AUDIO_SINK_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_BASE_AUDIO_SINK,GstOmxBaseAudioSinkClass))
 
 #define GST_OMX_BASE_AUDIO_SINK(obj) (GstOmxBaseAudioSink *) (obj)
 #define GST_OMX_BASE_AUDIO_SINK_TYPE (gst_omx_base_audio_sink_get_type ())
@@ -42,7 +47,7 @@ typedef void (*GstOmxBaseAudioSinkCb) (GstOmxBaseAudioSink *self);
 
 struct GstOmxBaseAudioSink
 {
-    GstElement element;
+    GstBaseSink element;
 
     GstPad *sinkpad;
     GOmxPadData sinkpad_data;
@@ -59,11 +64,12 @@ struct GstOmxBaseAudioSink
     gboolean initialized;
 
     GstOmxBaseAudioSinkCb omx_setup;
+    GstStateChangeReturn (*change_state) (GstElement * element, GstStateChange transition);
 };
 
 struct GstOmxBaseAudioSinkClass
 {
-    GstElementClass parent_class;
+    GstBaseSinkClass parent_class;
 };
 
 void gst_omx_base_audio_sink_omx_init (GstOmxBaseAudioSink *self);

@@ -3,8 +3,8 @@
  * Copyright (C) 2008 NXP. All rights reserved.
  *
  * Author: Felipe Contreras <felipe.contreras@nokia.com>
- * Frederik Vernelen <frederik.vernelen@nxp.com>
- *
+ * Contributor: Frederik Vernelen <frederik.vernelen@nxp.com>
+ 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation
@@ -24,8 +24,12 @@
 #include "gstomx_base_audio_sink.h"
 #include "gstomx.h"
 
+static gboolean event ( GstBaseSink *gst_base,
+                            GstEvent *event);
+static GstFlowReturn render (GstBaseSink *gst_base,
+                                GstBuffer *buf);
+
 static gboolean share_input_buffer = FALSE;
-static gboolean share_output_buffer = FALSE;
 
 static gboolean send_disable_event (GstOmxBaseAudioSink *self,GstPad *pad);
 static gboolean send_enable_event (GstOmxBaseAudioSink *self,GstPad *pad);
@@ -42,7 +46,6 @@ enum
 
 static GstElementClass *parent_class = NULL;
 
-
 static void
 setup_ports (GstOmxBaseAudioSink *self)
 {
@@ -57,10 +60,10 @@ setup_ports (GstOmxBaseAudioSink *self)
     param->nVersion.s.nVersionMinor = 1;
 
     /* Input port configuration. */
+
     param->nPortIndex = 0;
     OMX_GetParameter (core->omx_handle, OMX_IndexParamPortDefinition, param);
     self->in_port = g_omx_core_setup_port (core, param);
-    self->in_port->done = FALSE;
 
     free (param);
 }
@@ -108,8 +111,8 @@ enable_tunneled_ports (GstOmxBaseAudioSink *self)
 }
 
 static GstStateChangeReturn
-change_state (GstElement *element,
-              GstStateChange transition)
+gst_omx_base_audio_sink_change_state (GstElement *element,
+                                              GstStateChange transition)
 {
     OMX_ERRORTYPE omx_error = OMX_ErrorNone;
     GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
@@ -150,7 +153,7 @@ change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (omx_error != OMX_ErrorNone)
             {
-              return GST_STATE_CHANGE_FAILURE;
+                return GST_STATE_CHANGE_FAILURE;
             }
             break;
         case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
@@ -208,7 +211,7 @@ change_state (GstElement *element,
             g_omx_sem_down (gomx->port_state_sem);
             if (omx_error != OMX_ErrorNone)
             {
-              return GST_STATE_CHANGE_FAILURE;
+                return GST_STATE_CHANGE_FAILURE;
             }
 
             OMX_SendCommand (gomx->omx_handle, OMX_CommandStateSet, OMX_StateLoaded, NULL);
@@ -227,9 +230,49 @@ change_state (GstElement *element,
         default:
             break;
     }
-
+    //ret = self->change_state(element, transition);
     GST_LOG_OBJECT (self, "end");
     return ret;
+}
+
+
+static gboolean
+start (GstBaseSink *gst_base)
+{
+    GstOmxBaseAudioSink *self;
+
+    self = GST_OMX_BASE_AUDIO_SINK (gst_base);
+
+    GST_LOG_OBJECT (self, "begin");
+
+    if (self->initialized == FALSE)
+    {
+        gst_omx_base_audio_sink_omx_init (self);
+    }
+
+    GST_LOG_OBJECT (self, "end");
+
+    return TRUE;
+}
+
+static gboolean
+stop (GstBaseSink *gst_base)
+{
+    GstOmxBaseAudioSink *self;
+
+    self = GST_OMX_BASE_AUDIO_SINK (gst_base);
+
+    GST_LOG_OBJECT (self, "begin");
+
+    g_omx_core_finish (self->gomx);
+
+    g_omx_core_deinit (self->gomx);
+    if (self->gomx->omx_error)
+        return GST_STATE_CHANGE_FAILURE;
+
+    GST_LOG_OBJECT (self, "end");
+
+    return TRUE;
 }
 
 static void
@@ -239,7 +282,6 @@ dispose (GObject *obj)
 
     self = GST_OMX_BASE_AUDIO_SINK (obj);
 
-    g_omx_core_deinit (self->gomx);
     g_omx_core_free (self->gomx);
 
     g_free (self->omx_component);
@@ -332,14 +374,21 @@ type_class_init (gpointer g_class,
 {
     GObjectClass *gobject_class;
     GstElementClass *gstelement_class;
+    GstBaseSinkClass *gst_base_sink_class;
 
     gobject_class = G_OBJECT_CLASS (g_class);
     gstelement_class = GST_ELEMENT_CLASS (g_class);
-
+    gst_base_sink_class = GST_BASE_SINK_CLASS (g_class);
+ 
     parent_class = g_type_class_ref (GST_TYPE_ELEMENT);
 
     gobject_class->dispose = dispose;
-    gstelement_class->change_state = change_state;
+
+    gst_base_sink_class->start = start;
+    gst_base_sink_class->stop = stop;
+    gst_base_sink_class->event = event;
+    gst_base_sink_class->preroll = render;
+    gst_base_sink_class->render = render;
 
     /* Properties stuff */
     {
@@ -364,8 +413,7 @@ type_class_init (gpointer g_class,
         g_object_class_install_property (gobject_class, ARG_ALLOW_OMX_TUNNEL,
                                          g_param_spec_boolean ("Allow-omx-tunnel", "Allow OMX Tunnel",
                                                                "Allow setting up an omx tunnel between this component and another component",
-                                                               TRUE,
-                                                               G_PARAM_READWRITE));
+                                                               TRUE, G_PARAM_READWRITE));
 
         g_object_class_install_property (gobject_class, ARG_GOMX_CORE,
                                          g_param_spec_pointer ("GOMX-Core-Pointer", "GOMX Core Pointer",
@@ -373,7 +421,21 @@ type_class_init (gpointer g_class,
                                                                G_PARAM_READWRITE));
 
     }
+
+    GstStaticPadTemplate padTemplate =
+            GST_STATIC_PAD_TEMPLATE (
+                                     "sink",          // the name of the pad
+                                     GST_PAD_SINK,    // the direction of the pad
+                                     GST_PAD_ALWAYS,  // when this pad will be present
+                                     GST_STATIC_CAPS (        // the capabilities of the padtemplate
+                                             "audio/x-raw-int, "
+                                             "channels = (int) [ 1, 6 ]"
+                                                     )
+                                    );
+     gst_element_class_add_pad_template (gstelement_class, 
+                                             gst_static_pad_template_get (&padTemplate));
 }
+
 
 static GstPad*
 find_peer_of_proxypad(GstPad *peer)
@@ -558,15 +620,15 @@ pad_unlink  (GstPad *pad)
 }
 
 static GstFlowReturn
-pad_chain (GstPad *pad,
-           GstBuffer *buf)
+render ( GstBaseSink *gst_base,
+         GstBuffer *buf)
 {
     GOmxCore *gomx;
     GOmxPort *in_port;
     GstOmxBaseAudioSink *self;
     GstFlowReturn ret = GST_FLOW_OK;
 
-    self = GST_OMX_BASE_AUDIO_SINK (GST_OBJECT_PARENT (pad));
+    self = GST_OMX_BASE_AUDIO_SINK (gst_base);
 
     gomx = self->gomx;
 
@@ -589,7 +651,19 @@ pad_chain (GstPad *pad,
 
         if (G_UNLIKELY (gomx->omx_state != OMX_StateExecuting))
         {
-            GST_ERROR_OBJECT (self, "Whoa! very wrong");
+            if(gomx->omx_state == OMX_StatePause)
+            {
+                GST_LOG_OBJECT (self, "end of prerolling");
+                g_omx_core_start (gomx);
+                if(self->gomx->omx_error)
+                {
+                    return GST_STATE_CHANGE_FAILURE;
+                }
+            }
+            else
+            {
+                GST_ERROR_OBJECT (self, "Whoa! very wrong");
+            }
         }
 
         while (G_LIKELY (buffer_offset < GST_BUFFER_SIZE (buf)))
@@ -664,7 +738,6 @@ leave:
     {
         gst_buffer_unref (buf);
     }
-
     GST_LOG_OBJECT (self, "end");
 
     return ret;
@@ -721,8 +794,8 @@ send_enable_event (GstOmxBaseAudioSink *self,GstPad *pad)
 }
 
 static gboolean
-pad_event (GstPad *pad,
-           GstEvent *event)
+event ( GstBaseSink *gst_base,
+            GstEvent *event)
 {
     GstOmxBaseAudioSink *self;
     GOmxCore *gomx;
@@ -730,7 +803,7 @@ pad_event (GstPad *pad,
     GOmxPort *in_port;
     GstMessage *EOSmessage;
 
-    self = GST_OMX_BASE_AUDIO_SINK (GST_OBJECT_PARENT (pad));
+    self = GST_OMX_BASE_AUDIO_SINK (gst_base);
     gomx = self->gomx;
     in_port = self->in_port;
 
@@ -797,6 +870,7 @@ event_handler_cb (GOmxCore *core,
     }
 }
 
+
 static void
 type_instance_init (GTypeInstance *instance,
                     gpointer g_class)
@@ -821,24 +895,26 @@ type_instance_init (GTypeInstance *instance,
         gomx->event_handler_cb = event_handler_cb;
     }
 
-    self->sinkpad =
-        gst_pad_new_from_template (gst_element_class_get_pad_template (element_class, "sink"), "sink");
+    self->sinkpad = gst_element_get_pad (GST_ELEMENT (self), "sink");
+
+    if(self->sinkpad == NULL)
+        return;
 
     (self->sinkpad_data).setting_tunnel = FALSE;
 
-    gst_pad_set_chain_function (self->sinkpad, pad_chain);
-    gst_pad_set_event_function (self->sinkpad, pad_event);
     //note that when linking against ghost-pads, the link function of the ghost pad should call this link function when the ghost pad gets linked to another ghost- or proxypad.
     gst_pad_set_link_function (self->sinkpad, pad_sink_link);
     gst_pad_set_unlink_function (self->sinkpad, pad_unlink);
     gst_pad_set_element_private (self->sinkpad, &(self->sinkpad_data));
 
-    gst_element_add_pad (GST_ELEMENT (self), self->sinkpad);
-
     self->omx_library = g_strdup (DEFAULT_LIBRARY_NAME);
+
+    self->change_state = element_class->change_state;
+    element_class->change_state = GST_DEBUG_FUNCPTR (gst_omx_base_audio_sink_change_state);
 
     GST_LOG_OBJECT (self, "end");
 }
+
 
 void
 gst_omx_base_audio_sink_omx_init (GstOmxBaseAudioSink *self)
@@ -866,14 +942,12 @@ gst_omx_base_audio_sink_omx_init (GstOmxBaseAudioSink *self)
     GST_LOG_OBJECT (self, "end");
 }
 
-
-
 GType
 gst_omx_base_audio_sink_get_type (void)
 {
     static GType type = 0;
 
-    if (G_UNLIKELY (type == 0))
+    if (type == 0)
     {
         GTypeInfo *type_info;
 
@@ -883,7 +957,7 @@ gst_omx_base_audio_sink_get_type (void)
         type_info->instance_size = sizeof (GstOmxBaseAudioSink);
         type_info->instance_init = type_instance_init;
 
-        type = g_type_register_static (GST_TYPE_ELEMENT, "GstOmxBaseAudioSink", type_info, 0);
+        type = g_type_register_static (GST_TYPE_BASE_SINK, "GstOmxBaseAudioSink", type_info, 0);
 
         g_free (type_info);
     }
