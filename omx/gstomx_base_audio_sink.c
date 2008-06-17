@@ -732,14 +732,6 @@ render ( GstBaseSink *gst_base,
         ret = GST_FLOW_UNEXPECTED;
     }
 
-leave:
-
-    if (!share_input_buffer)
-    {
-        gst_buffer_unref (buf);
-    }
-    GST_LOG_OBJECT (self, "end");
-
     return ret;
 }
 
