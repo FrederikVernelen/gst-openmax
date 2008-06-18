@@ -143,6 +143,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (self->gomx->omx_error || (omx_error != OMX_ErrorNone))
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
             break;
@@ -153,6 +154,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (omx_error != OMX_ErrorNone)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
             break;
@@ -162,12 +164,14 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (omx_error != OMX_ErrorNone)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
 
             g_omx_core_start (gomx);
             if(self->gomx->omx_error)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
             break;
@@ -187,6 +191,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (omx_error != OMX_ErrorNone)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
             break;
@@ -200,6 +205,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->state_sem);
             if (omx_error != OMX_ErrorNone)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
             break;
@@ -211,6 +217,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
             g_omx_sem_down (gomx->port_state_sem);
             if (omx_error != OMX_ErrorNone)
             {
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
 
@@ -220,7 +227,7 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
 
             if (self->gomx->omx_error || (omx_error != OMX_ErrorNone))
             {
-                g_print("GST_STATE_CHANGE_FAILURE\n");
+                GST_WARNING_OBJECT (self, "GST_STATE_CHANGE_FAILURE");
                 return GST_STATE_CHANGE_FAILURE;
             }
 
@@ -230,11 +237,10 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
         default:
             break;
     }
-    //ret = self->change_state(element, transition);
+    ret = self->change_state(element, transition);
     GST_LOG_OBJECT (self, "end");
     return ret;
 }
-
 
 static gboolean
 start (GstBaseSink *gst_base)
@@ -368,6 +374,43 @@ get_property (GObject *obj,
     }
 }
 
+static GstFlowReturn
+        preroll ( GstBaseSink *gst_base,
+                 GstBuffer *buf)
+{
+    GOmxCore *gomx;
+    GOmxPort *in_port;
+    GstOmxBaseAudioSink *self;
+    GstFlowReturn ret = GST_FLOW_OK;
+
+    self = GST_OMX_BASE_AUDIO_SINK (gst_base);
+
+    gomx = self->gomx;
+
+    GST_LOG_OBJECT (self, "begin");
+    GST_LOG_OBJECT (self, "gst_buffer: size=%lu", GST_BUFFER_SIZE (buf));
+
+    GST_LOG_OBJECT (self, "state: %d", gomx->omx_state);
+
+    in_port = self->in_port;
+
+    if (G_UNLIKELY(in_port->tunneled))
+    {
+        g_print("in_port->tunneled\n");
+        return GST_FLOW_OK;
+    }
+
+    if(gomx->omx_state == OMX_StatePause)
+    {
+        g_omx_core_start (gomx);
+    }
+    else
+    {
+        GST_ERROR_OBJECT (self, "Whoa! very wrong");
+    }
+    return render(gst_base,buf);
+}
+
 static void
 type_class_init (gpointer g_class,
                  gpointer class_data)
@@ -387,7 +430,7 @@ type_class_init (gpointer g_class,
     gst_base_sink_class->start = start;
     gst_base_sink_class->stop = stop;
     gst_base_sink_class->event = event;
-    gst_base_sink_class->preroll = render;
+    gst_base_sink_class->preroll = preroll;
     gst_base_sink_class->render = render;
 
     /* Properties stuff */
@@ -422,18 +465,6 @@ type_class_init (gpointer g_class,
 
     }
 
-    GstStaticPadTemplate padTemplate =
-            GST_STATIC_PAD_TEMPLATE (
-                                     "sink",          // the name of the pad
-                                     GST_PAD_SINK,    // the direction of the pad
-                                     GST_PAD_ALWAYS,  // when this pad will be present
-                                     GST_STATIC_CAPS (        // the capabilities of the padtemplate
-                                             "audio/x-raw-int, "
-                                             "channels = (int) [ 1, 6 ]"
-                                                     )
-                                    );
-     gst_element_class_add_pad_template (gstelement_class, 
-                                             gst_static_pad_template_get (&padTemplate));
 }
 
 
@@ -651,19 +682,7 @@ render ( GstBaseSink *gst_base,
 
         if (G_UNLIKELY (gomx->omx_state != OMX_StateExecuting))
         {
-            if(gomx->omx_state == OMX_StatePause)
-            {
-                GST_LOG_OBJECT (self, "end of prerolling");
-                g_omx_core_start (gomx);
-                if(self->gomx->omx_error)
-                {
-                    return GST_STATE_CHANGE_FAILURE;
-                }
-            }
-            else
-            {
-                GST_ERROR_OBJECT (self, "Whoa! very wrong");
-            }
+            GST_ERROR_OBJECT (self, "Whoa! very wrong");
         }
 
         while (G_LIKELY (buffer_offset < GST_BUFFER_SIZE (buf)))
@@ -671,6 +690,7 @@ render ( GstBaseSink *gst_base,
             OMX_BUFFERHEADERTYPE *omx_buffer;
             GST_LOG_OBJECT (self, "request buffer");
             omx_buffer = g_omx_port_request_buffer (in_port);
+
             if (G_LIKELY (omx_buffer))
             {
                 GST_DEBUG_OBJECT (self, "omx_buffer: size=%lu, len=%lu, flags=%lu, offset=%lu, timestamp=%lld",
@@ -701,9 +721,11 @@ render ( GstBaseSink *gst_base,
                 }
                 else
                 {
+
                     omx_buffer->nFilledLen = MIN (GST_BUFFER_SIZE (buf) - buffer_offset,
                                                   omx_buffer->nAllocLen - omx_buffer->nOffset);
                     memcpy (omx_buffer->pBuffer + omx_buffer->nOffset, GST_BUFFER_DATA (buf) + buffer_offset, omx_buffer->nFilledLen);
+
                 }
 
                 if (self->use_timestamps)
@@ -713,10 +735,10 @@ render ( GstBaseSink *gst_base,
                                                                         GST_SECOND);
                 }
 
+                buffer_offset += omx_buffer->nFilledLen;
                 GST_LOG_OBJECT (self, "release_buffer");
                 g_omx_port_release_buffer (in_port, omx_buffer);
 
-                buffer_offset += omx_buffer->nFilledLen;
             }
             else
             {
@@ -731,6 +753,8 @@ render ( GstBaseSink *gst_base,
         GST_WARNING_OBJECT (self, "done");
         ret = GST_FLOW_UNEXPECTED;
     }
+
+    GST_LOG_OBJECT (self, "end");
 
     return ret;
 }
