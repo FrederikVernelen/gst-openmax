@@ -237,6 +237,15 @@ gst_omx_base_audio_sink_change_state (GstElement *element,
         default:
             break;
     }
+    switch (transition)
+    {
+        case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+        case GST_STATE_CHANGE_READY_TO_PAUSED:
+        {
+            if((in_port->tunneled)||(!in_port->linked)) /*no correct prerolling yet in tunneled case*/
+                return ret;
+        }
+    }
     ret = self->change_state(element, transition);
     GST_LOG_OBJECT (self, "end");
     return ret;
