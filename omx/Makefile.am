@@ -30,6 +30,7 @@ libgstomx_la_SOURCES = gstomx.c gstomx.h \
 		       gstomx_ilbcdec.c gstomx_ilbcdec.h \
 		       gstomx_ilbcenc.c gstomx_ilbcenc.h \
 		       gstomx_base_sink.c gstomx_base_sink.h \
+		       gstomx_base_audio_sink.c gstomx_base_audio_sink.h \
 		       gstomx_audiosink.c gstomx_audiosink.h \
 		       gstomx_videosink.c gstomx_videosink.h \
 		       gstomx_base_src.c gstomx_base_src.h \
